@@ -1,9 +1,9 @@
 #include "wifi_f.h"
+
 #include <inttypes.h>
 #include <string.h>
 
-static const char* SSID = "";
-static const char* PASSWORD = "";
+#include "freertos/event_groups.h"
 
 #define TAG "wifi_f"
 
@@ -15,11 +15,80 @@ static const char* PASSWORD = "";
 static const int WIFI_RETRY_ATTEMPT = 3;
 static int wifi_retry_count = 0;
 
-static esp_netif_t *netif = NULL;
+static esp_netif_t *wifi_f_netif = NULL;
 static esp_event_handler_instance_t ip_event_handler;
 static esp_event_handler_instance_t wifi_event_handler;
 
 static EventGroupHandle_t s_wifi_event_group = NULL;
+
+static void ip_event_cb(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    ESP_LOGI(TAG, "Handling IP event, event code 0x%" PRIx32, event_id);
+    switch (event_id)
+    {
+    case (IP_EVENT_STA_GOT_IP):
+        ip_event_got_ip_t *event_ip = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event_ip->ip_info.ip));
+        wifi_retry_count = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        break;
+    case (IP_EVENT_STA_LOST_IP):
+        ESP_LOGI(TAG, "Lost IP");
+        break;
+    case (IP_EVENT_GOT_IP6):
+        ip_event_got_ip6_t *event_ip6 = (ip_event_got_ip6_t *)event_data;
+        ESP_LOGI(TAG, "Got IPv6: " IPV6STR, IPV62STR(event_ip6->ip6_info.ip));
+        wifi_retry_count = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        break;
+    default:
+        ESP_LOGI(TAG, "IP event not handled");
+        break;
+    }
+}
+
+static void wifi_event_cb(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    ESP_LOGI(TAG, "Handling Wi-Fi event, event code 0x%" PRIx32, event_id);
+
+    switch (event_id)
+    {
+    case (WIFI_EVENT_WIFI_READY):
+        ESP_LOGI(TAG, "Wi-Fi ready");
+        break;
+    case (WIFI_EVENT_SCAN_DONE):
+        ESP_LOGI(TAG, "Wi-Fi scan done");
+        break;
+    case (WIFI_EVENT_STA_START):
+        ESP_LOGI(TAG, "Wi-Fi started, connecting to AP...");
+        esp_wifi_connect();
+        break;
+    case (WIFI_EVENT_STA_STOP):
+        ESP_LOGI(TAG, "Wi-Fi stopped");
+        break;
+    case (WIFI_EVENT_STA_CONNECTED):
+        ESP_LOGI(TAG, "Wi-Fi connected");
+        break;
+    case (WIFI_EVENT_STA_DISCONNECTED):
+        ESP_LOGI(TAG, "Wi-Fi disconnected");
+        if (wifi_retry_count < WIFI_RETRY_ATTEMPT) {
+            ESP_LOGI(TAG, "Retrying to connect to Wi-Fi network...");
+            esp_wifi_connect();
+            wifi_retry_count++;
+        } else {
+            ESP_LOGI(TAG, "Failed to connect to Wi-Fi network");
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+        }
+        break;
+    case (WIFI_EVENT_STA_AUTHMODE_CHANGE):
+        ESP_LOGI(TAG, "Wi-Fi authmode changed");
+        break;
+    default:
+        ESP_LOGI(TAG, "Wi-Fi event not handled");
+        break;
+    }
+}
+
 
 esp_err_t wifi_f_init(void)
 {
@@ -50,8 +119,8 @@ esp_err_t wifi_f_init(void)
         return ret;
     }
 
-    netif = esp_netif_create_default_wifi_sta();
-    if (netif == NULL) {
+    wifi_f_netif = esp_netif_create_default_wifi_sta();
+    if (wifi_f_netif == NULL) {
         ESP_LOGE(TAG, "Failed to create default WiFi STA interface");
         return ESP_FAIL;
     }
@@ -60,7 +129,7 @@ esp_err_t wifi_f_init(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    /*ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &wifi_event_cb,
                                                         NULL,
@@ -69,7 +138,7 @@ esp_err_t wifi_f_init(void)
                                                         ESP_EVENT_ANY_ID,
                                                         &ip_event_cb,
                                                         NULL,
-                                                        &ip_event_handler));*/
+                                                        &ip_event_handler));
     return ret;
 }
 
@@ -109,3 +178,29 @@ esp_err_t wifi_f_connect(char* wifi_ssid, char* wifi_password)
     return ESP_FAIL;
 }
 
+esp_err_t wifi_f_disconnect(void)
+{
+    if (s_wifi_event_group) {
+        vEventGroupDelete(s_wifi_event_group);
+    }
+
+    return esp_wifi_disconnect();
+}
+
+esp_err_t wifi_f_deinit(void)
+{
+    esp_err_t ret = esp_wifi_stop();
+    if (ret == ESP_ERR_WIFI_NOT_INIT) {
+        ESP_LOGE(TAG, "Wi-Fi stack not initialized");
+        return ret;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_deinit());
+    ESP_ERROR_CHECK(esp_wifi_clear_default_wifi_driver_and_handlers(wifi_f_netif));
+    esp_netif_destroy(wifi_f_netif);
+
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, ESP_EVENT_ANY_ID, ip_event_handler));
+    ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler));
+
+    return ESP_OK;
+}
