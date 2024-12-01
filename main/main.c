@@ -3,23 +3,31 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <sys/stat.h>
 #include <sys/unistd.h>
 #include <unistd.h>
 #include "hal/gpio_types.h"
 #include "hc_sr_04.h"
 #include "soc/gpio_num.h"
+#include "wifi_f.h"
+#include <esp_wifi.h>
+#include <esp_http_server.h>
 
 #define LED_PIN GPIO_NUM_2
 #define TRIG_PIN GPIO_NUM_4
 #define ECHO_PIN GPIO_NUM_18
 
 static const char *TAG = "VCS";
+static char *WIFI_SSID = "Tenda_5151A0_5G";
+static char *WIFI_PASSWORD = "63521153";
 
 void setup(void);
+void connect_wifi(char *ssid, char *password);
 
 void app_main(void)
 {
 	setup();
+	connect_wifi(WIFI_SSID, WIFI_PASSWORD);
 	int distance = 0;
 	for (;;)
 	{
@@ -37,4 +45,30 @@ void setup(void)
   	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
+}
+
+void connect_wifi(char *ssid, char *password)
+{
+	ESP_LOGI(TAG, "Establishing connection...");
+    ESP_ERROR_CHECK(wifi_f_init());
+
+    esp_err_t ret = wifi_f_connect(ssid, password);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to connect to Wi-Fi network");
+    }
+
+    wifi_ap_record_t ap_info;
+    ret = esp_wifi_sta_get_ap_info(&ap_info);
+    if (ret == ESP_ERR_WIFI_CONN) {
+        ESP_LOGE(TAG, "Wi-Fi station interface not initialized");
+    }
+    else if (ret == ESP_ERR_WIFI_NOT_CONNECT) {
+        ESP_LOGE(TAG, "Wi-Fi station is not connected");
+    } else {
+        ESP_LOGI(TAG, "--- Access Point Information ---");
+        ESP_LOG_BUFFER_HEX("MAC Address", ap_info.bssid, sizeof(ap_info.bssid));
+        ESP_LOG_BUFFER_CHAR("SSID", ap_info.ssid, sizeof(ap_info.ssid));
+        ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
+        ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
+    }
 }
