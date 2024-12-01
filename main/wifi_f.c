@@ -1,9 +1,11 @@
 #include "wifi_f.h"
+#include "esp_log.h"
+#include "esp_netif_types.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/event_groups.h>
 
 #include <inttypes.h>
 #include <string.h>
-
-#include "freertos/event_groups.h"
 
 #define TAG "wifi_f"
 

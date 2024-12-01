@@ -7,13 +7,13 @@ static const char *TAG = "Time";
 
 void initialize_sntp(void) {
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, "pool.ntp.org"); // Використання глобального NTP-сервера
+    esp_sntp_setservername(0, "pool.ntp.org");
     esp_sntp_init();
 
     time_t now = 0;
     struct tm timeinfo = { 0 };
-    int retry = 5; // Кількість спроб синхронізації
-    const int retry_delay = 2000; // Затримка між спробами в мс
+    int retry = 5;
+    const int retry_delay = 2000;
     while (timeinfo.tm_year < (2023 - 1900) && retry > 0) {
         ESP_LOGI(TAG, "Waiting for time to be set... (%d retries left)", retry);
         vTaskDelay(pdMS_TO_TICKS(retry_delay));

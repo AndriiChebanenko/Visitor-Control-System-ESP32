@@ -2,16 +2,9 @@
 #include "driver/timer.h"
 #include "driver/timer_types_legacy.h"
 #include "esp_log.h"
-//#include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
-//#include <stdbool.h>
-//#include <sys/stat.h>
-//#include <sys/unistd.h>
-//#include <unistd.h>
-//#include "hal/gpio_types.h"
 #include "hc_sr_04.h"
-//#include "portmacro.h"
-//#include "soc/gpio_num.h"
 #include "wifi_f.h"
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
@@ -37,16 +30,23 @@ void connect_wifi(char *ssid, char *password);
 void create_tcpclient(int port, char *ip);
 void timer_delay_ms(uint32_t ms);
 void wifi_task(void* arg);
+void track_visitors_task(void* arg);
 
 TaskHandle_t wifi_task_handle;
-TaskHandle_t task_2_handle;
+TaskHandle_t track_visitors_task_handle;
 
 void app_main(void)
 {
 	setup();
 	wifi_auth_data_t auth_data = {WIFI_SSID, WIFI_PASSWORD};
-	xTaskCreate(wifi_task, "WiFi management task", 4096, (void*)&auth_data, 1, &wifi_task_handle);
-	while (true)
+	xTaskCreate(wifi_task,
+				"WiFi management task",
+				4096, 
+				(void*)&auth_data, 
+				1, 
+				&wifi_task_handle);
+	
+	while (1)
 	{
 		vTaskDelay(1000);
 	}
@@ -146,5 +146,14 @@ void wifi_task(void* arg)
         ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
         ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
     }
-    while (true) {}
+    while (1) {}
+}
+
+void track_visitors_task(void* arg)
+{
+	
+	while (1)
+	{
+		
+	}
 }
