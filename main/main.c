@@ -1,4 +1,5 @@
 #include "driver/gpio.h"
+#include "driver/timer.h"
 #include "esp_log.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -12,6 +13,8 @@
 #include "wifi_f.h"
 #include <esp_wifi.h>
 #include <esp_http_server.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <sys/socket.h>
 
@@ -26,6 +29,10 @@ static char *WIFI_PASSWORD = "63521153";
 void setup(void);
 void connect_wifi(char *ssid, char *password);
 void create_tcpclient(int port, char *ip);
+void timer_delay_ms(uint32_t ms);
+
+TaskHandle_t task_1_handle;
+TaskHandle_t task_2_handle;
 
 void app_main(void)
 {
@@ -104,4 +111,51 @@ void create_tcpclient(int port, char *ip)
 
   // and then close the socket
   close(network_socket);
+}
+
+void timer_delay_ms(uint32_t ms)
+{
+	timer_config_t config = {
+        .alarm_en = TIMER_ALARM_EN,
+        .counter_en = TIMER_PAUSE,
+        .intr_type = TIMER_INTR_NONE,
+        .counter_dir = TIMER_COUNT_UP,
+        .auto_reload = TIMER_AUTORELOAD_DIS,
+        .divider = 160000
+    };
+
+    timer_init(TIMER_GROUP_0, TIMER_0, &config);
+    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
+
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, ms);
+    timer_start(TIMER_GROUP_0, TIMER_0);
+
+    while (1) {
+        uint64_t counter_val;
+        timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &counter_val);
+        if (counter_val >= ms) {
+            break;
+        }
+    }
+    timer_pause(TIMER_GROUP_0, TIMER_0);
+}
+
+void task_1(void *arg)
+{
+	int i = 0;
+	while (true)
+	{
+		printf("task_1 i: %d", i++);
+		timer_delay_ms(2000);
+	}
+}
+
+void task_2(void *arg)
+{
+	int d = (int)(*arg);
+	while (true)
+	{
+		printf("task_2 d: %d", d);
+		timer_delay_ms(2000);
+	}
 }
