@@ -1,5 +1,6 @@
 #include "driver/gpio.h"
 #include "driver/timer.h"
+#include "driver/timer_types_legacy.h"
 #include "esp_log.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -12,7 +13,6 @@
 #include "soc/gpio_num.h"
 #include "wifi_f.h"
 #include <esp_wifi.h>
-#include <esp_http_server.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -30,6 +30,10 @@ void setup(void);
 void connect_wifi(char *ssid, char *password);
 void create_tcpclient(int port, char *ip);
 void timer_delay_ms(uint32_t ms);
+void task_1(void* arg);
+void task_2(void* arg);
+
+int d = 777;
 
 TaskHandle_t task_1_handle;
 TaskHandle_t task_2_handle;
@@ -38,14 +42,17 @@ void app_main(void)
 {
 	setup();
 	connect_wifi(WIFI_SSID, WIFI_PASSWORD);
-	int distance = 0;
+	/*int distance = 0;
 	for (int i = 0; i < 4; i++)
 	{
 		distance = measure_distance_cm(TRIG_PIN, ECHO_PIN);
 		ESP_LOGI(TAG, "Distance: %d", distance);
 		sleep(2);
+	}*/
+	while (true)
+	{
+		vTaskDelay(1000);
 	}
-	create_tcpclient(8083, "10.10.10.251");
 }
 
 void setup(void)
@@ -115,29 +122,30 @@ void create_tcpclient(int port, char *ip)
 
 void timer_delay_ms(uint32_t ms)
 {
+	uint32_t us = 1000 * ms;
 	timer_config_t config = {
         .alarm_en = TIMER_ALARM_EN,
         .counter_en = TIMER_PAUSE,
         .intr_type = TIMER_INTR_NONE,
         .counter_dir = TIMER_COUNT_UP,
         .auto_reload = TIMER_AUTORELOAD_DIS,
-        .divider = 160000
+        .divider = 160
     };
 
     timer_init(TIMER_GROUP_0, TIMER_0, &config);
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
 
-    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, ms);
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, us);
     timer_start(TIMER_GROUP_0, TIMER_0);
 
     while (1) {
         uint64_t counter_val;
         timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &counter_val);
-        if (counter_val >= ms) {
+        if (counter_val >= us) {
             break;
         }
     }
-    timer_pause(TIMER_GROUP_0, TIMER_0);
+    timer_deinit(TIMER_GROUP_0, TIMER_0);
 }
 
 void task_1(void *arg)
@@ -145,17 +153,19 @@ void task_1(void *arg)
 	int i = 0;
 	while (true)
 	{
-		printf("task_1 i: %d", i++);
-		timer_delay_ms(2000);
+		printf("task_1 i: %d\n", i++);
+		//timer_delay_ms(2000);
+		vTaskDelay(1000);
 	}
 }
 
 void task_2(void *arg)
 {
-	int d = (int)(*arg);
+	int d = *((int*)arg);
 	while (true)
 	{
-		printf("task_2 d: %d", d);
-		timer_delay_ms(2000);
+		printf("task_2 d: %d\n", d);
+		//timer_delay_ms(3000);
+		vTaskDelay(2000);
 	}
 }
