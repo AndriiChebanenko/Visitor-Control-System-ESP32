@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include "hal/gpio_types.h"
 #include "hc_sr_04.h"
+#include "portmacro.h"
 #include "soc/gpio_num.h"
 #include "wifi_f.h"
 #include <esp_wifi.h>
@@ -26,29 +27,25 @@ static const char *TAG = "VCS";
 static char *WIFI_SSID = "Tenda_5151A0";
 static char *WIFI_PASSWORD = "63521153";
 
+typedef struct {
+	char *ssid;
+	char *password;
+} wifi_auth_data_t;
+
 void setup(void);
 void connect_wifi(char *ssid, char *password);
 void create_tcpclient(int port, char *ip);
 void timer_delay_ms(uint32_t ms);
-void task_1(void* arg);
-void task_2(void* arg);
+void wifi_task(void* arg);
 
-int d = 777;
-
-TaskHandle_t task_1_handle;
+TaskHandle_t wifi_task_handle;
 TaskHandle_t task_2_handle;
 
 void app_main(void)
 {
 	setup();
-	connect_wifi(WIFI_SSID, WIFI_PASSWORD);
-	/*int distance = 0;
-	for (int i = 0; i < 4; i++)
-	{
-		distance = measure_distance_cm(TRIG_PIN, ECHO_PIN);
-		ESP_LOGI(TAG, "Distance: %d", distance);
-		sleep(2);
-	}*/
+	wifi_auth_data_t auth_data = {WIFI_SSID, WIFI_PASSWORD};
+	xTaskCreate(wifi_task, "WiFi management task", 4096, (void*)&auth_data, 1, &wifi_task_handle);
 	while (true)
 	{
 		vTaskDelay(1000);
@@ -63,32 +60,6 @@ void setup(void)
   	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
-}
-
-void connect_wifi(char *ssid, char *password)
-{
-	ESP_LOGI(TAG, "Establishing connection...");
-    ESP_ERROR_CHECK(wifi_f_init());
-
-    esp_err_t ret = wifi_f_connect(ssid, password);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to connect to Wi-Fi network");
-    }
-
-    wifi_ap_record_t ap_info;
-    ret = esp_wifi_sta_get_ap_info(&ap_info);
-    if (ret == ESP_ERR_WIFI_CONN) {
-        ESP_LOGE(TAG, "Wi-Fi station interface not initialized");
-    }
-    else if (ret == ESP_ERR_WIFI_NOT_CONNECT) {
-        ESP_LOGE(TAG, "Wi-Fi station is not connected");
-    } else {
-        ESP_LOGI(TAG, "--- Access Point Information ---");
-        ESP_LOG_BUFFER_HEX("MAC Address", ap_info.bssid, sizeof(ap_info.bssid));
-        ESP_LOG_BUFFER_CHAR("SSID", ap_info.ssid, sizeof(ap_info.ssid));
-        ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
-        ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
-    }
 }
 
 void create_tcpclient(int port, char *ip)
@@ -148,24 +119,32 @@ void timer_delay_ms(uint32_t ms)
     timer_deinit(TIMER_GROUP_0, TIMER_0);
 }
 
-void task_1(void *arg)
+void wifi_task(void* arg)
 {
-	int i = 0;
-	while (true)
-	{
-		printf("task_1 i: %d\n", i++);
-		//timer_delay_ms(2000);
-		vTaskDelay(1000);
-	}
-}
+	char *ssid = ((wifi_auth_data_t*)arg)->ssid;
+	char *password = ((wifi_auth_data_t*)arg)->password;
+	
+	ESP_LOGI(TAG, "Establishing connection...");
+    ESP_ERROR_CHECK(wifi_f_init());
 
-void task_2(void *arg)
-{
-	int d = *((int*)arg);
-	while (true)
-	{
-		printf("task_2 d: %d\n", d);
-		//timer_delay_ms(3000);
-		vTaskDelay(2000);
-	}
+    esp_err_t ret = wifi_f_connect(ssid, password);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to connect to Wi-Fi network");
+    }
+
+    wifi_ap_record_t ap_info;
+    ret = esp_wifi_sta_get_ap_info(&ap_info);
+    if (ret == ESP_ERR_WIFI_CONN) {
+        ESP_LOGE(TAG, "Wi-Fi station interface not initialized");
+    }
+    else if (ret == ESP_ERR_WIFI_NOT_CONNECT) {
+        ESP_LOGE(TAG, "Wi-Fi station is not connected");
+    } else {
+        ESP_LOGI(TAG, "--- Access Point Information ---");
+        ESP_LOG_BUFFER_HEX("MAC Address", ap_info.bssid, sizeof(ap_info.bssid));
+        ESP_LOG_BUFFER_CHAR("SSID", ap_info.ssid, sizeof(ap_info.ssid));
+        ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
+        ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
+    }
+    while (true) {}
 }
