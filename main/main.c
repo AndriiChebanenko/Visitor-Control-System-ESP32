@@ -13,28 +13,32 @@
 #include <esp_wifi.h>
 #include <esp_http_server.h>
 
+#include <sys/socket.h>
+
 #define LED_PIN GPIO_NUM_2
 #define TRIG_PIN GPIO_NUM_4
 #define ECHO_PIN GPIO_NUM_18
 
 static const char *TAG = "VCS";
-static char *WIFI_SSID = "Tenda_5151A0_5G";
+static char *WIFI_SSID = "Tenda_5151A0";
 static char *WIFI_PASSWORD = "63521153";
 
 void setup(void);
 void connect_wifi(char *ssid, char *password);
+void create_tcpclient(int port, char *ip);
 
 void app_main(void)
 {
 	setup();
 	connect_wifi(WIFI_SSID, WIFI_PASSWORD);
 	int distance = 0;
-	for (;;)
+	for (int i = 0; i < 4; i++)
 	{
 		distance = measure_distance_cm(TRIG_PIN, ECHO_PIN);
 		ESP_LOGI(TAG, "Distance: %d", distance);
 		sleep(2);
 	}
+	create_tcpclient(8083, "10.10.10.251");
 }
 
 void setup(void)
@@ -71,4 +75,33 @@ void connect_wifi(char *ssid, char *password)
         ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
         ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
     }
+}
+
+void create_tcpclient(int port, char *ip)
+{
+	// create a socket
+  int network_socket;
+  network_socket = socket(AF_INET, SOCK_STREAM, 0);
+  
+  // specify an address for the socket
+  struct sockaddr_in server_address;
+  server_address.sin_family = AF_INET;
+  server_address.sin_port = htons(port);
+  server_address.sin_addr.s_addr = inet_addr(ip);
+
+  int connection_status = connect(network_socket, (struct sockaddr *) &server_address, sizeof(server_address));
+  // check for error with the connection
+  if (connection_status == -1){
+    printf("There was an error making a connection to the remote socket \n\n");
+  }
+  
+  // receive data from the server
+  char server_response[256];
+  recv(network_socket, &server_response, sizeof(server_response), 0);
+
+  // print out the server's response
+  printf("The server sent the data: %s\n", server_response);
+
+  // and then close the socket
+  close(network_socket);
 }
