@@ -161,16 +161,14 @@ void track_visitors_task(void* arg) {
 		{
 			switch (workmode) {
 			case COUNTER:
-				data = get_current_datetime();
+				data = get_current_datetime(2);
 				strcat(data, "\n");
 				strcat(visitors_data, data);
 				printf("Array: \n%s\n", visitors_data);
-				//ESP_LOGI(TAG, "Array: %s", visitors_data);
 				break;
 			case ALARM:
+				alarm_triggered = 1;
 				buzzer_on = 1;
-				/*vTaskDelay(pdMS_TO_TICKS(10000));
-				buzzer_on = 0;*/
 				break;
 			}						
 			vTaskDelay(pdMS_TO_TICKS(500));
@@ -179,7 +177,6 @@ void track_visitors_task(void* arg) {
 }
 
 void tcpserver_task(void* arg) {
-	ESP_LOGI(TAG, "tcpserver task started");
 	char buffer[256];
 	int server_socket = tcpserver_init();
 	
@@ -206,11 +203,11 @@ void tcpserver_task(void* arg) {
             printf("Received request: %s\n", buffer);
 
             // Обробка запиту
-            if (strcmp(buffer, "GET FILE") == 0) {
+            if (strcmp(buffer, "GET DATA") == 0) {
                 send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
                 ESP_LOGI("GET COMMAND", "Visitors data sent");
             }
-            else if (strcmp(buffer, "SET MODE") == 0) {
+            else if (strcmp(buffer, "CHANGE MODE") == 0) {
                 change_workmode();
                 switch (workmode) {
 					case COUNTER:
@@ -219,18 +216,21 @@ void tcpserver_task(void* arg) {
 						break;
 					case ALARM:
 						send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
-						if (alarm_triggered) {
-							send(client_socket, alarm_triggered_message, strlen(alarm_triggered_message), 0);
-							alarm_triggered = 0;
-						}
 						break;
 				} 					
  			}
+ 			else if (strcmp(buffer, "CHECK ALARM") == 0) {
+				if (alarm_triggered) {
+					send(client_socket, alarm_triggered_message, strlen(alarm_triggered_message), 0);
+					alarm_triggered = 0;
+				}
+			}
             else {
                 char server_message[] = "Unknown command!";
                 send(client_socket, server_message, strlen(server_message), 0);
             }
         }
+        
         // Закриття клієнтського сокета, але сервер продовжує працювати
         close(client_socket);        
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -255,4 +255,5 @@ void change_workmode(void) {
 		workmode = ALARM;
 	else
  		workmode = COUNTER;
+ 	ESP_LOGI(TAG, "Workmode changed on: %s", (workmode == COUNTER)?"COUNTER":"ALARM");
 }
