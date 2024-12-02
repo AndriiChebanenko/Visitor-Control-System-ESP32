@@ -1,11 +1,13 @@
+#include "driver/gptimer.h"
+#include "driver/gptimer_types.h"
+#include "esp_err.h"
 #include "freertos/projdefs.h"
 #include <stdint.h>
 #include <time.h>
 #include <stdio.h>
 #include <esp_log.h>
 #include <esp_sntp.h>
-#include "driver/timer.h"
-#include "driver/timer_types_legacy.h"
+//#include "driver/timer.h"
 
 #include "time_f.h"
 
@@ -67,7 +69,7 @@ char* get_current_datetime(void) {
     return datetime_str;
 }
 
-void timer_delay_us(uint32_t us)
+/*void timer_delay_us(uint32_t us)
 {
 	timer_config_t config = {
         .alarm_en = TIMER_ALARM_EN,
@@ -96,4 +98,40 @@ void timer_delay_us(uint32_t us)
 
 void timer_delay_ms(uint32_t ms) {
 	timer_delay_us(1000 * ms);
+}*/
+
+gptimer_handle_t gptimer_init(void) {
+    gptimer_handle_t timer_handle = NULL;
+
+    gptimer_config_t timer_config = {
+        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+        .direction = GPTIMER_COUNT_UP,
+        .resolution_hz = 500000
+    };
+
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &timer_handle));
+    ESP_ERROR_CHECK(gptimer_enable(timer_handle));
+    ESP_ERROR_CHECK(gptimer_start(timer_handle));
+
+    return timer_handle;
+}
+
+void gptimer_delay_us(gptimer_handle_t timer_handle, uint32_t delay_us) {
+    uint64_t start_count = 0;
+    gptimer_get_raw_count(timer_handle, &start_count);
+
+    uint64_t current_count = 0;
+
+    do {
+        gptimer_get_raw_count(timer_handle, &current_count);
+    } while ((current_count - start_count) < delay_us);
+}
+
+void gptimer_delay_ms(gptimer_handle_t timer_handle, uint32_t delay_ms) {
+	gptimer_delay_us(timer_handle, delay_ms * 1000);
+}
+
+void gptimer_deinit(gptimer_handle_t timer_handle) {
+	ESP_ERROR_CHECK(gptimer_stop(timer_handle));
+	ESP_ERROR_CHECK(gptimer_del_timer(timer_handle));
 }

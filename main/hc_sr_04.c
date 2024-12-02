@@ -10,7 +10,7 @@
 
 //static const char *TAG = "hc-sr-04";
 
-/*unsigned long IRAM_ATTR micros() {
+unsigned long IRAM_ATTR micros() {
     return (unsigned long) (esp_timer_get_time());
 }
 
@@ -27,14 +27,14 @@ void IRAM_ATTR delayMicroseconds(uint32_t us) {
             NOP();
         }
     }
-}*/
+}
 
 int measure_distance_cm(gpio_num_t trig_pin, gpio_num_t echo_pin) {
 	gpio_set_level(trig_pin, 0);
 	int64_t t0, t1, dt;
-	timer_delay_us(2);
+	delayMicroseconds(2);
 	gpio_set_level(trig_pin, 1);
-	timer_delay_us(10);
+	delayMicroseconds(10);
 	gpio_set_level(trig_pin, 0);
 	while (!gpio_get_level(echo_pin)) {}
 	t0 = esp_timer_get_time();

@@ -1,4 +1,5 @@
 #include "driver/gpio.h"
+#include "driver/gptimer_types.h"
 #include "esp_log.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -34,8 +35,8 @@ typedef enum {
 } workmode_t;
 
 static const char *TAG = "VCS";
-static char *WIFI_SSID = "alarm";
-static char *WIFI_PASSWORD = "48454443";
+static char *WIFI_SSID = "Kartoplyanka";
+static char *WIFI_PASSWORD = "12345789";
 char visitors_data[2000];
 workmode_t workmode = COUNTER;
 static uint8_t buzzer_on = 0;
@@ -167,8 +168,8 @@ void track_visitors_task(void* arg) {
 				break;
 			case ALARM:
 				buzzer_on = 1;
-				vTaskDelay(pdMS_TO_TICKS(10000));
-				buzzer_on = 0;
+				/*vTaskDelay(pdMS_TO_TICKS(10000));
+				buzzer_on = 0;*/
 				break;
 			}						
 			vTaskDelay(pdMS_TO_TICKS(500));
@@ -209,8 +210,10 @@ void tcpserver_task(void* arg) {
             }
             else if (strcmp(buffer, "SET MODE") == 0) {
                 change_workmode();
-                if (workmode == COUNTER)
-                	send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
+                if (workmode == COUNTER) {
+					send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
+					buzzer_on = 0;
+				}               	
                 else
  					send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
  			}
@@ -232,15 +235,17 @@ void buzzer_task(void *arg) {
 	int freq = *((int*)arg);
 	int period = 1000000 / (freq * 2);
 	while (1) {
-		if (buzzer_on) {
-			for (int i = 0; i < 200; i++) {
-				gpio_set_level(BUZZ_PIN, 1);
-				timer_delay_ms(period);
-				gpio_set_level(BUZZ_PIN, 0);
-				timer_delay_ms(period);
-			}
-		}
 		vTaskDelay(pdMS_TO_TICKS(1000));
+		if (buzzer_on && workmode == ALARM) {
+			gptimer_handle_t timer_handle = gptimer_init();
+			for (int i = 0; i < 400; i++) {
+				gpio_set_level(BUZZ_PIN, 1);
+				gptimer_delay_ms(timer_handle, period);
+				gpio_set_level(BUZZ_PIN, 0);
+				gptimer_delay_ms(timer_handle, period);
+			}
+			gptimer_deinit(timer_handle);
+		}
 	}
 }
 
