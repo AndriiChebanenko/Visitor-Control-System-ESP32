@@ -34,12 +34,19 @@ typedef enum {
 	ALARM
 } workmode_t;
 
+typedef enum {
+	GET_DATA,
+	CHANGE_MODE,
+	CHECK_ALARM,
+	TURN_ALARM_OFF,
+	UNDEFINED
+} command_t;
+
 static const char *TAG = "VCS";
 static char *WIFI_SSID = "Kartoplyanka";
 static char *WIFI_PASSWORD = "12345789";
 char visitors_data[2000];
 workmode_t workmode = COUNTER;
-static uint8_t buzzer_on = 0;
 static uint8_t alarm_triggered = 0;
 
 void setup(void);
@@ -48,6 +55,7 @@ void track_visitors_task(void* arg);
 void tcpserver_task(void* arg);
 void buzzer_task(void* arg);
 void change_workmode(void);
+command_t determine_command(char* command);
 
 TaskHandle_t wifi_task_handle;
 TaskHandle_t track_visitors_task_handle;
@@ -168,7 +176,6 @@ void track_visitors_task(void* arg) {
 				break;
 			case ALARM:
 				alarm_triggered = 1;
-				buzzer_on = 1;
 				break;
 			}						
 			vTaskDelay(pdMS_TO_TICKS(500));
@@ -183,6 +190,7 @@ void tcpserver_task(void* arg) {
 	const char workmode_counter_message[] = "Workmode set: COUNTER";
 	const char workmode_alarm_message[] = "Workmode set: ALARM";
 	const char alarm_triggered_message[] = "Alarm triggered!";
+	const char message_unknown[] = "Unknown command";
 	
 	while (1) {
         // Приймаємо підключення
@@ -193,58 +201,59 @@ void tcpserver_task(void* arg) {
             memset(buffer, 0, sizeof(buffer)); // Очищення буфера
             ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
 
-            if (bytes_received <= 0) {
-                // Клієнт відключився або стався збій
+            if (bytes_received <= 0) {         // Клієнт відключився або стався збій
                 printf("Client disconnected.\n");
                 break;
             }
-
-            buffer[strcspn(buffer, "\n")] = 0; // Видалення символа нового рядка
+            
             printf("Received request: %s\n", buffer);
 
-            // Обробка запиту
-            if (strcmp(buffer, "GET DATA") == 0) {
-                send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
-                ESP_LOGI("GET COMMAND", "Visitors data sent");
-            }
-            else if (strcmp(buffer, "CHANGE MODE") == 0) {
-                change_workmode();
-                switch (workmode) {
-					case COUNTER:
-						send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
-						buzzer_on = 0;
-						break;
-					case ALARM:
-						send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
-						break;
-				} 					
- 			}
- 			else if (strcmp(buffer, "CHECK ALARM") == 0) {
-				if (alarm_triggered) {
-					send(client_socket, alarm_triggered_message, strlen(alarm_triggered_message), 0);
+            command_t command = determine_command(buffer);
+            switch (command) {
+				case GET_DATA:
+                	send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
+                	ESP_LOGI("GET COMMAND", "Visitors data sent");
+                	break;
+                case CHANGE_MODE:
+                	change_workmode();
+                	switch (workmode) {
+						case COUNTER:
+							send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
+							alarm_triggered = 0;
+							break;
+						case ALARM:
+							send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
+							break;
+					}
+					break;
+				case CHECK_ALARM:
+					if (alarm_triggered) {
+						send(client_socket, alarm_triggered_message, strlen(alarm_triggered_message), 0);					
+					}
+					else
+						send(client_socket, "OK", 3, 0);
+					break;
+				case TURN_ALARM_OFF:
 					alarm_triggered = 0;
-				}
-			}
-            else {
-                char server_message[] = "Unknown command!";
-                send(client_socket, server_message, strlen(server_message), 0);
-            }
-        }
-        
-        // Закриття клієнтського сокета, але сервер продовжує працювати
+					break;
+				default:
+					send(client_socket, message_unknown, strlen(message_unknown), 0);
+					break;
+        	}
+    	}
+    	// Закриття клієнтського сокета, але сервер продовжує працювати
         close(client_socket);        
         vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    
-    tcpserver_deinit(server_socket);
+	}
+	tcpserver_deinit(server_socket);
 }
 
 void buzzer_task(void *arg) {
 	while (1) {
-		vTaskDelay(pdMS_TO_TICKS(500));
-		if (buzzer_on && workmode == ALARM) {
+		vTaskDelay(pdMS_TO_TICKS(250));
+		if (alarm_triggered && workmode == ALARM) {
 			gpio_set_level(BUZZ_PIN, 1);
-			vTaskDelay(pdMS_TO_TICKS(500));
+			vTaskDelay(pdMS_TO_TICKS(250));
 			gpio_set_level(BUZZ_PIN, 0);
 		}
 	}
@@ -256,4 +265,12 @@ void change_workmode(void) {
 	else
  		workmode = COUNTER;
  	ESP_LOGI(TAG, "Workmode changed on: %s", (workmode == COUNTER)?"COUNTER":"ALARM");
+}
+
+command_t determine_command(char* command) {
+	if (strcmp(command, "GET DATA") == 0) return GET_DATA;
+	else if (strcmp(command, "CHANGE MODE") == 0) return CHANGE_MODE;
+	else if (strcmp(command, "CHECK ALARM") == 0) return CHECK_ALARM;
+	else if (strcmp(command, "TURN ALARM OFF") == 0) return TURN_ALARM_OFF;
+	else return UNDEFINED;
 }
