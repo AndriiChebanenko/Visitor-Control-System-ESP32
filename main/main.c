@@ -1,12 +1,14 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 #include "freertos/projdefs.h"
+#include "hal/gpio_types.h"
 #include "hc_sr_04.h"
 #include "lwip/sockets.h"
 #include "wifi_f.h"
@@ -19,25 +21,36 @@
 #define LED_PIN GPIO_NUM_2
 #define TRIG_PIN GPIO_NUM_4
 #define ECHO_PIN GPIO_NUM_18
-
-static const char *TAG = "VCS";
-static char *WIFI_SSID = "Kartoplyanka";
-static char *WIFI_PASSWORD = "12345789";
-char visitors_data[2000];
+#define BUZZ_PIN GPIO_NUM_19
 
 typedef struct {
 	char *ssid;
 	char *password;
 } wifi_auth_data_t;
 
+typedef enum {
+	COUNTER,
+	ALARM
+} workmode_t;
+
+static const char *TAG = "VCS";
+static char *WIFI_SSID = "alarm";
+static char *WIFI_PASSWORD = "48454443";
+char visitors_data[2000];
+workmode_t workmode = COUNTER;
+static uint8_t buzzer_on = 0;
+
 void setup(void);
 void wifi_task(void* arg);
 void track_visitors_task(void* arg);
 void tcpserver_task(void* arg);
+void buzzer_task(void* arg);
+void change_workmode(void);
 
 TaskHandle_t wifi_task_handle;
 TaskHandle_t track_visitors_task_handle;
 TaskHandle_t tcpserver_task_handle;
+TaskHandle_t buzzer_task_handle;
 
 void app_main(void) {
 	setup();
@@ -65,6 +78,14 @@ void app_main(void) {
 				NULL, 
 				2, 
 				&tcpserver_task_handle);
+	
+	const int buzzer_freq = 5000;			
+	xTaskCreate(buzzer_task, 
+				"Buzzer task", 
+				2048, 
+				(void*)&buzzer_freq, 
+				2, 
+				&buzzer_task_handle);
 	while (1)
 	{
 		vTaskDelay(1000);
@@ -75,9 +96,11 @@ void setup(void) {
 	gpio_reset_pin(LED_PIN);
 	gpio_reset_pin(TRIG_PIN);
 	gpio_reset_pin(ECHO_PIN);
+	gpio_reset_pin(BUZZ_PIN);
   	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
+  	gpio_set_direction(BUZZ_PIN, GPIO_MODE_OUTPUT);
 }
 
 void wifi_task(void* arg) {
@@ -134,11 +157,20 @@ void track_visitors_task(void* arg) {
 		dist = measure_distance_cm(TRIG_PIN, ECHO_PIN);
 		if (dist > min_trig_distance && dist < max_trig_distance)
 		{
-			data = get_current_datetime();
-			strcat(data, "\n");
-			strcat(visitors_data, data);
-			printf("Array: \n%s\n", visitors_data);
-			//ESP_LOGI(TAG, "Array: %s", visitors_data);
+			switch (workmode) {
+			case COUNTER:
+				data = get_current_datetime();
+				strcat(data, "\n");
+				strcat(visitors_data, data);
+				printf("Array: \n%s\n", visitors_data);
+				//ESP_LOGI(TAG, "Array: %s", visitors_data);
+				break;
+			case ALARM:
+				buzzer_on = 1;
+				vTaskDelay(pdMS_TO_TICKS(10000));
+				buzzer_on = 0;
+				break;
+			}						
 			vTaskDelay(pdMS_TO_TICKS(500));
 		}
 	}
@@ -149,12 +181,14 @@ void tcpserver_task(void* arg) {
 	char buffer[256];
 	int server_socket = tcpserver_init();
 	
+	const char workmode_counter_message[] = "Workmode set: COUNTER";
+	const char workmode_alarm_message[] = "Workmode set: ALARM";
+	
 	while (1) {
         // Приймаємо підключення
-        int client_socket = accept(server_socket, NULL, NULL);
+        int client_socket = accept(server_socket, NULL, NULL); 
         printf("Client connected.\n");
 
-        // Обробка запитів клієнта
         while (1) {
             memset(buffer, 0, sizeof(buffer)); // Очищення буфера
             ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
@@ -172,9 +206,15 @@ void tcpserver_task(void* arg) {
             if (strcmp(buffer, "GET FILE") == 0) {
                 send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
                 ESP_LOGI("GET COMMAND", "Visitors data sent");
-            } else if (strcmp(buffer, "SET MODE") == 0) {
-                ESP_LOGI(TAG, "SET MODE command received"); // Встановлюємо режим
-            } else {
+            }
+            else if (strcmp(buffer, "SET MODE") == 0) {
+                change_workmode();
+                if (workmode == COUNTER)
+                	send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
+                else
+ 					send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
+ 			}
+            else {
                 char server_message[] = "Unknown command!";
                 send(client_socket, server_message, strlen(server_message), 0);
             }
@@ -186,4 +226,27 @@ void tcpserver_task(void* arg) {
     }
     
     tcpserver_deinit(server_socket);
+}
+
+void buzzer_task(void *arg) {
+	int freq = *((int*)arg);
+	int period = 1000000 / (freq * 2);
+	while (1) {
+		if (buzzer_on) {
+			for (int i = 0; i < 200; i++) {
+				gpio_set_level(BUZZ_PIN, 1);
+				timer_delay_ms(period);
+				gpio_set_level(BUZZ_PIN, 0);
+				timer_delay_ms(period);
+			}
+		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+}
+
+void change_workmode(void) {
+	if (workmode == COUNTER)
+		workmode = ALARM;
+	else
+ 		workmode = COUNTER;
 }

@@ -1,8 +1,13 @@
 #include "freertos/projdefs.h"
+#include <stdint.h>
 #include <time.h>
 #include <stdio.h>
 #include <esp_log.h>
 #include <esp_sntp.h>
+#include "driver/timer.h"
+#include "driver/timer_types_legacy.h"
+
+#include "time_f.h"
 
 static const char *TAG = "Time";
 
@@ -15,7 +20,7 @@ void initialize_sntp(void) {
     time_t now = 0;
     struct tm timeinfo = { 0 };
     int retry = 0;
-    const int retry_count = 5;
+    const int retry_count = 10;
     while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
         ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
         vTaskDelay(pdMS_TO_TICKS(2000));
@@ -60,4 +65,35 @@ char* get_current_datetime(void) {
     						timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
     						timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
     return datetime_str;
+}
+
+void timer_delay_us(uint32_t us)
+{
+	timer_config_t config = {
+        .alarm_en = TIMER_ALARM_EN,
+        .counter_en = TIMER_PAUSE,
+        .intr_type = TIMER_INTR_NONE,
+        .counter_dir = TIMER_COUNT_UP,
+        .auto_reload = TIMER_AUTORELOAD_DIS,
+        .divider = 160
+    };
+
+    timer_init(TIMER_GROUP_0, TIMER_0, &config);
+    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
+
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, us);
+    timer_start(TIMER_GROUP_0, TIMER_0);
+
+    while (1) {
+        uint64_t counter_val;
+        timer_get_counter_value(TIMER_GROUP_0, TIMER_0, &counter_val);
+        if (counter_val >= us) {
+            break;
+        }
+    }
+    timer_deinit(TIMER_GROUP_0, TIMER_0);
+}
+
+void timer_delay_ms(uint32_t ms) {
+	timer_delay_us(1000 * ms);
 }
