@@ -232,19 +232,12 @@ void tcpserver_task(void* arg) {
 }
 
 void buzzer_task(void *arg) {
-	int freq = *((int*)arg);
-	int period = 1000000 / (freq * 2);
 	while (1) {
-		vTaskDelay(pdMS_TO_TICKS(1000));
+		vTaskDelay(pdMS_TO_TICKS(500));
 		if (buzzer_on && workmode == ALARM) {
-			gptimer_handle_t timer_handle = gptimer_init();
-			for (int i = 0; i < 400; i++) {
-				gpio_set_level(BUZZ_PIN, 1);
-				gptimer_delay_ms(timer_handle, period);
-				gpio_set_level(BUZZ_PIN, 0);
-				gptimer_delay_ms(timer_handle, period);
-			}
-			gptimer_deinit(timer_handle);
+			gpio_set_level(BUZZ_PIN, 1);
+			vTaskDelay(pdMS_TO_TICKS(500));
+			gpio_set_level(BUZZ_PIN, 0);
 		}
 	}
 }
