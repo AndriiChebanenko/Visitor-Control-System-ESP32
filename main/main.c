@@ -40,6 +40,7 @@ static char *WIFI_PASSWORD = "12345789";
 char visitors_data[2000];
 workmode_t workmode = COUNTER;
 static uint8_t buzzer_on = 0;
+static uint8_t alarm_triggered = 0;
 
 void setup(void);
 void wifi_task(void* arg);
@@ -184,6 +185,7 @@ void tcpserver_task(void* arg) {
 	
 	const char workmode_counter_message[] = "Workmode set: COUNTER";
 	const char workmode_alarm_message[] = "Workmode set: ALARM";
+	const char alarm_triggered_message[] = "Alarm triggered!";
 	
 	while (1) {
         // Приймаємо підключення
@@ -210,12 +212,19 @@ void tcpserver_task(void* arg) {
             }
             else if (strcmp(buffer, "SET MODE") == 0) {
                 change_workmode();
-                if (workmode == COUNTER) {
-					send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
-					buzzer_on = 0;
-				}               	
-                else
- 					send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
+                switch (workmode) {
+					case COUNTER:
+						send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
+						buzzer_on = 0;
+						break;
+					case ALARM:
+						send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
+						if (alarm_triggered) {
+							send(client_socket, alarm_triggered_message, strlen(alarm_triggered_message), 0);
+							alarm_triggered = 0;
+						}
+						break;
+				} 					
  			}
             else {
                 char server_message[] = "Unknown command!";
@@ -223,8 +232,7 @@ void tcpserver_task(void* arg) {
             }
         }
         // Закриття клієнтського сокета, але сервер продовжує працювати
-        close(client_socket);
-        
+        close(client_socket);        
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     
