@@ -8,8 +8,10 @@
 
 #include "freertos/projdefs.h"
 #include "hc_sr_04.h"
+#include "lwip/sockets.h"
 #include "wifi_f.h"
 #include "time_f.h"
+#include "tcpserver.h"
 
 #include <string.h>
 #include <sys/socket.h>
@@ -29,14 +31,13 @@ typedef struct {
 } wifi_auth_data_t;
 
 void setup(void);
-void connect_wifi(char *ssid, char *password);
-void create_tcpclient(int port, char *ip);
-void timer_delay_ms(uint32_t ms);
 void wifi_task(void* arg);
 void track_visitors_task(void* arg);
+void tcpserver_task(void* arg);
 
 TaskHandle_t wifi_task_handle;
 TaskHandle_t track_visitors_task_handle;
+TaskHandle_t tcpserver_task_handle;
 
 void app_main(void) {
 	setup();
@@ -46,7 +47,7 @@ void app_main(void) {
 				"WiFi management task",
 				4096, 
 				(void*)&auth_data, 
-				2, 
+				3, 
 				&wifi_task_handle);
 	vTaskDelay(pdMS_TO_TICKS(5000));
 	
@@ -55,8 +56,15 @@ void app_main(void) {
 				"Tracking visitors and writing time of detecting to datafile", 
 				4096, 
 				(void*)&detecting_range, 
-				1, 
+				2, 
 				&track_visitors_task_handle);
+				
+	xTaskCreate(tcpserver_task, 
+				"TCP Server task", 
+				4096, 
+				NULL, 
+				2, 
+				&tcpserver_task_handle);
 	while (1)
 	{
 		vTaskDelay(1000);
@@ -70,34 +78,6 @@ void setup(void) {
   	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
   	gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
-}
-
-void create_tcpclient(int port, char *ip) {
-	// create a socket
-  int network_socket;
-  network_socket = socket(AF_INET, SOCK_STREAM, 0);
-  
-  // specify an address for the socket
-  struct sockaddr_in server_address;
-  server_address.sin_family = AF_INET;
-  server_address.sin_port = htons(port);
-  server_address.sin_addr.s_addr = inet_addr(ip);
-
-  int connection_status = connect(network_socket, (struct sockaddr *) &server_address, sizeof(server_address));
-  // check for error with the connection
-  if (connection_status == -1){
-    printf("There was an error making a connection to the remote socket \n\n");
-  }
-  
-  // receive data from the server
-  char server_response[256];
-  recv(network_socket, &server_response, sizeof(server_response), 0);
-
-  // print out the server's response
-  printf("The server sent the data: %s\n", server_response);
-
-  // and then close the socket
-  close(network_socket);
 }
 
 void wifi_task(void* arg) {
@@ -151,17 +131,59 @@ void track_visitors_task(void* arg) {
 	while (1)
 	{
 		vTaskDelay(pdMS_TO_TICKS(100));
-		ESP_LOGI(TAG, "Tracking...");
 		dist = measure_distance_cm(TRIG_PIN, ECHO_PIN);
-		ESP_LOGI(TAG, "111");
 		if (dist > min_trig_distance && dist < max_trig_distance)
 		{
 			data = get_current_datetime();
-			strcat(data, "\n\r");
+			strcat(data, "\n");
 			strcat(visitors_data, data);
-			printf("Array: %s\n", visitors_data);
+			printf("Array: \n%s\n", visitors_data);
 			//ESP_LOGI(TAG, "Array: %s", visitors_data);
-			vTaskDelay(pdMS_TO_TICKS(1000));
+			vTaskDelay(pdMS_TO_TICKS(500));
 		}
 	}
+}
+
+void tcpserver_task(void* arg) {
+	ESP_LOGI(TAG, "tcpserver task started");
+	char buffer[256];
+	int server_socket = tcpserver_init();
+	
+	while (1) {
+        // Приймаємо підключення
+        int client_socket = accept(server_socket, NULL, NULL);
+        printf("Client connected.\n");
+
+        // Обробка запитів клієнта
+        while (1) {
+            memset(buffer, 0, sizeof(buffer)); // Очищення буфера
+            ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytes_received <= 0) {
+                // Клієнт відключився або стався збій
+                printf("Client disconnected.\n");
+                break;
+            }
+
+            buffer[strcspn(buffer, "\n")] = 0; // Видалення символа нового рядка
+            printf("Received request: %s\n", buffer);
+
+            // Обробка запиту
+            if (strcmp(buffer, "GET FILE") == 0) {
+                send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
+                ESP_LOGI("GET COMMAND", "Visitors data sent");
+            } else if (strcmp(buffer, "SET MODE") == 0) {
+                ESP_LOGI(TAG, "SET MODE command received"); // Встановлюємо режим
+            } else {
+                char server_message[] = "Unknown command!";
+                send(client_socket, server_message, strlen(server_message), 0);
+            }
+        }
+        // Закриття клієнтського сокета, але сервер продовжує працювати
+        close(client_socket);
+        
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    
+    tcpserver_deinit(server_socket);
 }
