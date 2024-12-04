@@ -56,6 +56,7 @@ void tcpserver_task(void* arg);
 void buzzer_task(void* arg);
 void change_workmode(void);
 command_t determine_command(char* command);
+void blink_led(int blinks_number);
 
 TaskHandle_t wifi_task_handle;
 TaskHandle_t track_visitors_task_handle;
@@ -172,6 +173,7 @@ void track_visitors_task(void* arg) {
 				data = get_current_datetime(2);
 				strcat(data, "\n");
 				strcat(visitors_data, data);
+				blink_led(1);
 				printf("Array: \n%s\n", visitors_data);
 				break;
 			case ALARM:
@@ -273,4 +275,15 @@ command_t determine_command(char* command) {
 	else if (strcmp(command, "CHECK ALARM") == 0) return CHECK_ALARM;
 	else if (strcmp(command, "TURN ALARM OFF") == 0) return TURN_ALARM_OFF;
 	else return UNDEFINED;
+}
+
+void blink_led(int blinks_number) {
+	if (blinks_number > 0) {
+		for (int i = 0; i < blinks_number; i++) {
+			gpio_set_level(LED_PIN, 1);
+			vTaskDelay(pdMS_TO_TICKS(100));
+			gpio_set_level(LED_PIN, 0);
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
+	}
 }
