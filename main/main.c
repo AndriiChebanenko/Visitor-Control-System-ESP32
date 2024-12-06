@@ -10,19 +10,21 @@
 
 #include "freertos/projdefs.h"
 #include "hal/gpio_types.h"
-#include "hc_sr_04.h"
 #include "lwip/sockets.h"
 #include "wifi_f.h"
 #include "time_f.h"
 #include "tcpserver.h"
+#include <ultrasonic.h>
 
 #include <string.h>
 #include <sys/socket.h>
 
 #define LED_PIN GPIO_NUM_2
-#define TRIG_PIN GPIO_NUM_4
+#define TRIG_PIN GPIO_NUM_5
 #define ECHO_PIN GPIO_NUM_18
 #define BUZZ_PIN GPIO_NUM_19
+
+#define MAX_DISTANCE_CM 500
 
 typedef struct {
 	char *ssid;
@@ -61,6 +63,11 @@ TaskHandle_t wifi_task_handle;
 TaskHandle_t track_visitors_task_handle;
 TaskHandle_t tcpserver_task_handle;
 TaskHandle_t buzzer_task_handle;
+
+ultrasonic_sensor_t sensor = {
+        .trigger_pin = TRIG_PIN,
+        .echo_pin = ECHO_PIN
+    };
 
 void app_main(void) {
 	setup();
@@ -103,13 +110,20 @@ void app_main(void) {
 }
 
 void setup(void) {
+	
+
+    ultrasonic_init(&sensor);
+    
 	gpio_reset_pin(LED_PIN);
-	gpio_reset_pin(TRIG_PIN);
-	gpio_reset_pin(ECHO_PIN);
+	//gpio_reset_pin(TRIG_PIN);
+	//gpio_reset_pin(ECHO_PIN);
 	gpio_reset_pin(BUZZ_PIN);
+	
+	//gpio_set_pull_mode(ECHO_PIN, GPIO_PULLDOWN_ONLY);
+	
   	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
-  	gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
-  	gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
+  	//gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
+  	//gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
   	gpio_set_direction(BUZZ_PIN, GPIO_MODE_OUTPUT);
 }
 
@@ -148,23 +162,24 @@ void track_visitors_task(void* arg) {
 	
 	initialize_sntp();
 	
-	int dist;
+	float dist;
 	int *range = (int*)arg;
 	float range_start = range[0] / 100.0f;
 	float range_end = range[1] / 100.0f;
 	
 	char *data;
 	
-	int initial_distance = measure_distance_cm(TRIG_PIN, ECHO_PIN);
-	ESP_LOGI(TAG, "Initial distance: %d", initial_distance);
-	int min_trig_distance = (int)(initial_distance * range_start);
-	int max_trig_distance = (int)(initial_distance * range_end);
-	ESP_LOGI(TAG, "Min distance: %d, Max distance: %d", min_trig_distance, max_trig_distance);
+	float initial_distance;
+	ESP_ERROR_CHECK(ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &initial_distance));
+	ESP_LOGI(TAG, "Initial distance: %.2f", initial_distance);
+	float min_trig_distance = initial_distance * range_start;
+	float max_trig_distance = initial_distance * range_end;
+	ESP_LOGI(TAG, "Min distance: %.2f, Max distance: %.2f", min_trig_distance, max_trig_distance);
 	
 	while (1)
 	{
 		vTaskDelay(pdMS_TO_TICKS(100));
-		dist = measure_distance_cm(TRIG_PIN, ECHO_PIN);
+		ESP_ERROR_CHECK(ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &dist));
 		if (dist > min_trig_distance && dist < max_trig_distance)
 		{
 			switch (workmode) {
