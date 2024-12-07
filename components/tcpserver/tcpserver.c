@@ -1,10 +1,3 @@
-/*
- * tcpserver.c
- *
- *  Created on: 2 груд. 2024 р.
- *      Author: andri
- */
-
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
