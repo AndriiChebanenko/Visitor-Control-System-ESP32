@@ -171,7 +171,7 @@ void track_visitors_task(void* arg) {
 	char *data;
 	
 	float initial_distance;
-	ESP_ERROR_CHECK(ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &initial_distance));
+	ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &initial_distance);
 	blink_led(1, 500);
 	ESP_LOGI(TAG, "Initial distance: %.2f", initial_distance);
 	float min_trig_distance = initial_distance * range_start;
@@ -181,7 +181,7 @@ void track_visitors_task(void* arg) {
 	while (1)
 	{
 		vTaskDelay(pdMS_TO_TICKS(100));
-		ESP_ERROR_CHECK(ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &dist));
+		ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &dist);
 		if (dist > min_trig_distance && dist < max_trig_distance)
 		{
 			switch (workmode) {
