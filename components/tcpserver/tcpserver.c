@@ -14,26 +14,38 @@
 #include "tcpserver.h"
 
 int tcpserver_init() {
-	// Створення серверного сокета
+    // Create the server socket
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket < 0) {
+        perror("Socket creation failed");
+        return -1;
+    }
 
-    // Визначення адреси сервера
+    // Define the server address
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(8083);
-    
+
     esp_ip4_addr_t ip = get_ip_address();
-	char ip_str[16];
-	ip_to_string(&ip, ip_str, sizeof(ip_str));
-	ESP_LOGI("IP", "IP Address as string: %s", ip_str);
+    char ip_str[16];
+    ip_to_string(&ip, ip_str, sizeof(ip_str));
+    ESP_LOGI("IP", "IP Address as string: %s", ip_str);
 
     server_address.sin_addr.s_addr = inet_addr("192.168.43.43");
 
-    // Прив'язка сокета до IP та порта
-    bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address));
+    // Bind the socket to the IP and port
+    if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
+        perror("Bind failed");
+        close(server_socket); // Clean up on error
+        return -1;
+    }
 
-    // Прослуховування підключень
-    listen(server_socket, 5);
+    // Start listening for connections
+    if (listen(server_socket, 5) < 0) {
+        perror("Listen failed");
+        close(server_socket); // Clean up on error
+        return -1;
+    }
 
     printf("Server is listening on 10.10.10.251:8083\n");
     return server_socket;
