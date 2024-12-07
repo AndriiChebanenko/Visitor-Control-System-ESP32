@@ -37,6 +37,7 @@ typedef enum {
 
 typedef enum {
 	GET_DATA,
+	GET_MODE,
 	CHANGE_MODE,
 	CHECK_ALARM,
 	TURN_ALARM_OFF,
@@ -204,10 +205,12 @@ void tcpserver_task(void* arg) {
 	char buffer[256];
 	int server_socket = tcpserver_init();
 	
-	const char workmode_counter_message[] = "Workmode set: COUNTER";
-	const char workmode_alarm_message[] = "Workmode set: ALARM";
+	const char change_workmode_counter_message[] = "Workmode set: COUNTER";
+	const char change_workmode_alarm_message[] = "Workmode set: ALARM";
 	const char alarm_triggered_message[] = "Alarm triggered!";
-	const char message_unknown[] = "Unknown command";
+	const char unknown_message[] = "Unknown command";
+	const char mode_counter_message[] = "Mode: COUNTER";
+	const char mode_alarm_message[] = "Mode: ALARM";
 	
 	while (1) {
         // Приймаємо підключення
@@ -231,15 +234,22 @@ void tcpserver_task(void* arg) {
                 	send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
                 	ESP_LOGI("GET COMMAND", "Visitors data sent");
                 	break;
+                case GET_MODE:
+                	if (workmode == COUNTER) {
+						send(client_socket, mode_counter_message, strlen(mode_counter_message), 0);
+					} else {
+						send(client_socket, mode_alarm_message, strlen(mode_alarm_message), 0);
+					}
+					break;
                 case CHANGE_MODE:
                 	change_workmode();
                 	switch (workmode) {
 						case COUNTER:
-							send(client_socket, workmode_counter_message, strlen(workmode_counter_message), 0);
+							send(client_socket, change_workmode_counter_message, strlen(change_workmode_counter_message), 0);
 							alarm_triggered = 0;
 							break;
 						case ALARM:
-							send(client_socket, workmode_alarm_message, strlen(workmode_alarm_message), 0);
+							send(client_socket, change_workmode_alarm_message, strlen(change_workmode_alarm_message), 0);
 							break;
 					}
 					break;
@@ -254,7 +264,7 @@ void tcpserver_task(void* arg) {
 					alarm_triggered = 0;
 					break;
 				default:
-					send(client_socket, message_unknown, strlen(message_unknown), 0);
+					send(client_socket, unknown_message, strlen(unknown_message), 0);
 					break;
         	}
     	}
@@ -286,6 +296,7 @@ void change_workmode(void) {
 
 command_t determine_command(char* command) {
 	if (strcmp(command, "GET DATA") == 0) return GET_DATA;
+	else if (strcmp(command, "GET MODE") == 0) return GET_MODE;
 	else if (strcmp(command, "CHANGE MODE") == 0) return CHANGE_MODE;
 	else if (strcmp(command, "CHECK ALARM") == 0) return CHECK_ALARM;
 	else if (strcmp(command, "TURN ALARM OFF") == 0) return TURN_ALARM_OFF;
