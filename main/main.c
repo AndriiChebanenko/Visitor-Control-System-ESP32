@@ -154,6 +154,10 @@ void wifi_task(void* arg) {
         ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
         ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
     }
+    
+    xTaskNotifyGive(track_visitors_task_handle);
+    xTaskNotifyGive(tcpserver_task_handle);
+    
     while (1) {
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
@@ -161,6 +165,7 @@ void wifi_task(void* arg) {
 
 void track_visitors_task(void* arg) {
 	
+	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 	initialize_sntp();
 	
 	float dist;
@@ -202,6 +207,8 @@ void track_visitors_task(void* arg) {
 }
 
 void tcpserver_task(void* arg) {
+	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	
 	char buffer[256];
 	int server_socket = tcpserver_init();
 	
