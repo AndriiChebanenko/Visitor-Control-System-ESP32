@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 
 #include "tcpserver.h"
+#include "components_log_props.h"
 
 int tcpserver_init() {
     // Create the server socket
@@ -24,13 +25,7 @@ int tcpserver_init() {
     // Define the server address
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
-    server_address.sin_port = htons(8083);
-
-    esp_ip4_addr_t ip = get_ip_address();
-    char ip_str[16];
-    ip_to_string(&ip, ip_str, sizeof(ip_str));
-    ESP_LOGI("IP", "IP Address as string: %s", ip_str);
-
+    server_address.sin_port = htons(8083);	
     server_address.sin_addr.s_addr = inet_addr("192.168.43.43");
 
     // Bind the socket to the IP and port
@@ -46,8 +41,9 @@ int tcpserver_init() {
         close(server_socket); // Clean up on error
         return -1;
     }
-
-    printf("Server is listening on 10.10.10.251:8083\n");
+	#ifdef COMPONENTS_LOG_ON
+    	printf("Server is listening on 10.10.10.251:8083\n");
+    #endif
     return server_socket;
 }
 
@@ -61,7 +57,9 @@ esp_ip4_addr_t get_ip_address() {
     esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
 
     if (netif == NULL) {
-        ESP_LOGE("IP_INFO", "Failed to get netif handle");
+		#ifdef COMPONENTS_LOG_ON
+        	ESP_LOGE("IP_INFO", "Failed to get netif handle");
+        #endif
         return ip_address; // Повертаємо 0.0.0.0
     }
 
@@ -69,18 +67,10 @@ esp_ip4_addr_t get_ip_address() {
     if (ret == ESP_OK) {
         ip_address = ip_info.ip; // Повертаємо IP-адресу
     } else {
-        ESP_LOGE("IP_INFO", "Failed to get IP info: %s", esp_err_to_name(ret));
+		#ifdef COMPONENTS_LOG_ON
+        	ESP_LOGE("IP_INFO", "Failed to get IP info: %s", esp_err_to_name(ret));
+        #endif
     }
 
     return ip_address;
-}
-
-void ip_to_string(const esp_ip4_addr_t *ip, char *ip_str, size_t len) {
-    if (ip == NULL || ip_str == NULL || len < 16) { // IPv4 максимум 15 символів + термінатор
-        if (ip_str != NULL && len > 0) {
-            snprintf(ip_str, len, "Invalid");
-        }
-        return;
-    }
-    snprintf(ip_str, len, IPSTR, IP2STR(ip));
 }

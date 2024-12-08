@@ -6,14 +6,15 @@
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-
 #include "freertos/projdefs.h"
 #include "hal/gpio_types.h"
 #include "lwip/sockets.h"
+
 #include "wifi_f.h"
 #include "time_f.h"
 #include "tcpserver.h"
-#include <ultrasonic.h>
+#include "ultrasonic.h"
+#include "main_log_props.h"
 
 #include <string.h>
 #include <sys/socket.h>
@@ -44,7 +45,10 @@ typedef enum {
 	UNDEFINED
 } command_t;
 
-static const char *TAG = "VCS";
+#ifdef MAIN_LOG_ON
+	static const char *TAG = "VCS";
+#endif
+
 static char *WIFI_SSID = "Kartoplyanka";
 static char *WIFI_PASSWORD = "12345789";
 char visitors_data[2000];
@@ -80,7 +84,6 @@ void app_main(void) {
 				(void*)&auth_data, 
 				3, 
 				&wifi_task_handle);
-	vTaskDelay(pdMS_TO_TICKS(5000));
 	
 	int detecting_range[2] = {15, 85};
 	xTaskCreate(track_visitors_task, 
@@ -111,20 +114,12 @@ void app_main(void) {
 }
 
 void setup(void) {
-	
-
     ultrasonic_init(&sensor);
     
 	gpio_reset_pin(LED_PIN);
-	//gpio_reset_pin(TRIG_PIN);
-	//gpio_reset_pin(ECHO_PIN);
 	gpio_reset_pin(BUZZ_PIN);
 	
-	//gpio_set_pull_mode(ECHO_PIN, GPIO_PULLDOWN_ONLY);
-	
   	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
-  	//gpio_set_direction(TRIG_PIN, GPIO_MODE_OUTPUT);
-  	//gpio_set_direction(ECHO_PIN, GPIO_MODE_INPUT);
   	gpio_set_direction(BUZZ_PIN, GPIO_MODE_OUTPUT);
 }
 
@@ -132,28 +127,36 @@ void wifi_task(void* arg) {
 	char *ssid = ((wifi_auth_data_t*)arg)->ssid;
 	char *password = ((wifi_auth_data_t*)arg)->password;
 	
-	ESP_LOGI(TAG, "Establishing connection...");
+	#ifdef MAIN_LOG_ON
+		ESP_LOGI(TAG, "Establishing connection...");
+	#endif
+	
     ESP_ERROR_CHECK(wifi_f_init());
-
     esp_err_t ret = wifi_f_connect(ssid, password);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to connect to Wi-Fi network");
-    }
+    
+	#ifdef MAIN_LOG_ON
+    	if (ret != ESP_OK) {
+        	ESP_LOGE(TAG, "Failed to connect to Wi-Fi network");
+    	}
+	#endif
 
     wifi_ap_record_t ap_info;
     ret = esp_wifi_sta_get_ap_info(&ap_info);
-    if (ret == ESP_ERR_WIFI_CONN) {
-        ESP_LOGE(TAG, "Wi-Fi station interface not initialized");
-    }
-    else if (ret == ESP_ERR_WIFI_NOT_CONNECT) {
-        ESP_LOGE(TAG, "Wi-Fi station is not connected");
-    } else {
-        ESP_LOGI(TAG, "--- Access Point Information ---");
-        ESP_LOG_BUFFER_HEX("MAC Address", ap_info.bssid, sizeof(ap_info.bssid));
-        ESP_LOG_BUFFER_CHAR("SSID", ap_info.ssid, sizeof(ap_info.ssid));
-        ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
-        ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
-    }
+    
+	#ifdef MAIN_LOG_ON
+    	if (ret == ESP_ERR_WIFI_CONN) {
+        	ESP_LOGE(TAG, "Wi-Fi station interface not initialized");
+    	}
+    	else if (ret == ESP_ERR_WIFI_NOT_CONNECT) {
+        	ESP_LOGE(TAG, "Wi-Fi station is not connected");
+    	} else {
+        	ESP_LOGI(TAG, "--- Access Point Information ---");
+        	ESP_LOG_BUFFER_HEX("MAC Address", ap_info.bssid, sizeof(ap_info.bssid));
+        	ESP_LOG_BUFFER_CHAR("SSID", ap_info.ssid, sizeof(ap_info.ssid));
+        	ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
+        	ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
+    	}
+	#endif
     
     xTaskNotifyGive(track_visitors_task_handle);
     xTaskNotifyGive(tcpserver_task_handle);
@@ -178,10 +181,17 @@ void track_visitors_task(void* arg) {
 	float initial_distance;
 	ultrasonic_measure(&sensor, MAX_DISTANCE_CM, &initial_distance);
 	blink_led(1, 500);
-	ESP_LOGI(TAG, "Initial distance: %.2f", initial_distance);
+	
+	#ifdef MAIN_LOG_ON
+		ESP_LOGI(TAG, "Initial distance: %.2f", initial_distance);
+	#endif	
+	
 	float min_trig_distance = initial_distance * range_start;
 	float max_trig_distance = initial_distance * range_end;
-	ESP_LOGI(TAG, "Min distance: %.2f, Max distance: %.2f", min_trig_distance, max_trig_distance);
+	
+	#ifdef MAIN_LOG_ON	
+		ESP_LOGI(TAG, "Min distance: %.2f, Max distance: %.2f", min_trig_distance, max_trig_distance);
+	#endif	
 	
 	while (1)
 	{
@@ -195,7 +205,9 @@ void track_visitors_task(void* arg) {
 				strcat(data, "\n");
 				strcat(visitors_data, data);
 				blink_led(1, 70);
-				printf("Array: \n%s\n", visitors_data);
+				#ifdef MAIN_LOG_ON
+					printf("Array: \n%s\n", visitors_data);
+				#endif				
 				break;
 			case ALARM:
 				alarm_triggered = 1;
@@ -228,8 +240,10 @@ void tcpserver_task(void* arg) {
             memset(buffer, 0, sizeof(buffer)); // Очищення буфера
             ssize_t bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
 
-            if (bytes_received <= 0) {         // Клієнт відключився або стався збій
-                printf("Client disconnected.\n");
+            if (bytes_received <= 0) {         // Клієнт відключився або стався збій           
+				#ifdef MAIN_LOG_ON                
+                	printf("Client disconnected.\n");
+				#endif                
                 break;
             }
             
@@ -239,7 +253,9 @@ void tcpserver_task(void* arg) {
             switch (command) {
 				case GET_DATA:
                 	send(client_socket, visitors_data, strlen(visitors_data), 0); // Надсилаємо дані
-                	ESP_LOGI("GET COMMAND", "Visitors data sent");
+                	#ifdef MAIN_LOG_ON
+                		ESP_LOGI("GET COMMAND", "Visitors data sent");
+                	#endif
                 	break;
                 case GET_MODE:
                 	if (workmode == COUNTER) {
@@ -298,7 +314,9 @@ void change_workmode(void) {
 		workmode = ALARM;
 	else
  		workmode = COUNTER;
- 	ESP_LOGI(TAG, "Workmode changed on: %s", (workmode == COUNTER)?"COUNTER":"ALARM");
+ 	#ifdef MAIN_LOG_ON
+ 		ESP_LOGI(TAG, "Workmode changed on: %s", (workmode == COUNTER)?"COUNTER":"ALARM");
+ 	#endif
 }
 
 command_t determine_command(char* command) {
