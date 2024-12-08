@@ -230,6 +230,7 @@ void tcpserver_task(void* arg) {
 	const char unknown_message[] = "Unknown command";
 	const char mode_counter_message[] = "Mode: COUNTER";
 	const char mode_alarm_message[] = "Mode: ALARM";
+	const char alarm_turned_off_message[] = "Alarm turned off";
 	
 	while (1) {
         // Приймаємо підключення
@@ -285,6 +286,7 @@ void tcpserver_task(void* arg) {
 					break;
 				case TURN_ALARM_OFF:
 					alarm_triggered = 0;
+					send(client_socket, alarm_turned_off_message, strlen(alarm_turned_off_message), 0);
 					break;
 				default:
 					send(client_socket, unknown_message, strlen(unknown_message), 0);
