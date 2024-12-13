@@ -1,4 +1,5 @@
 idf_component_register(
+	SRCS "tcpserver.c"
     INCLUDE_DIRS "." ".."
-    REQUIRES freertos
-)
+    REQUIRES esp_wifi
+    )
