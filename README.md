@@ -1,11 +1,17 @@
-ESP-IDF template app
-====================
+This repository contains ESP IDF project files of project 'Visitor Control System' or, alternatively, 'VCS'. This project was fulfilled by Lviv Polytechnic National University studentds in order to improve microcontroller programming, team working, client-server workflow and other skills.
 
-This is a template application to be used with [Espressif IoT Development Framework](https://github.com/espressif/esp-idf).
+The main idea was to create system that performs optionally one of two functions:
+  - tracking visitors of any facility to estimate their total number and activity
+  - perform alarm function when facility is closed.
 
-Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting started instructions.
+As main microcontroller we chose ESP32 because:
+  - it's popular and verified solution when WiFi is used
+  - it's cheap.
 
-*Code in this repository is in the Public Domain (or CC0 licensed, at your option.)
-Unless required by applicable law or agreed to in writing, this
-software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-CONDITIONS OF ANY KIND, either express or implied.*
+To track person entering we used HC-SR04 ultrasonic sensor. There were several reasons to choose this type of sensor:
+  - it already was at hand
+  - it's cheap
+  - it's effective if placed in entrance as it was intended
+  - there are corresponding libraries.
+
+To record date and time of person entering we used SNTP and set up WiFi previously. Also, TCP-server was launched on ESP32 board through websocket. Server sent data to mobile app. In that way remote control through the mobile device like phone was established.
