@@ -1,12 +1,9 @@
 pipeline {
-    agent any
-
-    environment {
-        PATH = "$PATH:/usr/bin/docker"
-    }
+    agent none
 
     stages {
         stage('Checkout') {
+            agent { label 'linux-agent' }
             steps {
                 git branch: 'devops-lpnu',
                     url: 'https://github.com/AndriiChebanenko/Visitor-Control-System-ESP32.git'
@@ -18,7 +15,7 @@ pipeline {
                 docker {
                     image 'espressif/idf:release-v5.4'
                     args '--entrypoint= -e CCACHE_DISABLE=1'
-                    reuseNode true
+                    label 'linux-agent'
                 }
             }
 
@@ -28,6 +25,7 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
+            agent { label 'built-in' }
             steps {
                 script {
                     def scannerHome = tool 'sonar-scanner'
@@ -40,6 +38,7 @@ pipeline {
         }
 
         stage('Quality Gate') {
+            agent { label 'built-in' }
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
@@ -48,6 +47,7 @@ pipeline {
         }
 
         stage('Archive') {
+            agent { label 'built-in' }
             steps {
                 archiveArtifacts artifacts: 'build/*.bin, build/*.elf', fingerprint: true
             }
