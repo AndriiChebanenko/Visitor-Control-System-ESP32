@@ -17,7 +17,7 @@ pipeline {
             agent {
                 docker {
                     image 'espressif/idf:release-v5.4'
-                    args '--entrypoint='
+                    args '--entrypoint= -e CCACHE_DISABLE=1'
                     reuseNode true
                 }
             }
